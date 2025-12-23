@@ -1,0 +1,20 @@
+[Unit]
+Description=Yahoo Finance Server
+After=network.target
+
+[Service]
+Type=simple
+User=runner
+WorkingDirectory=/home/runner/work/yahoo/yahoo
+Environment="PATH=/home/runner/work/yahoo/yahoo/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/home/runner/work/yahoo/yahoo/venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+# 日志配置
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=yahoo-finance
+
+[Install]
+WantedBy=multi-user.target
