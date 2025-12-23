@@ -27,7 +27,7 @@ sudo systemctl status yahoo
 sudo journalctl -u yahoo -f
 
 # 部署日志
-tail -f /var/log/yahoo-deploy.log
+tail -f ~/yahoo-deploy.log
 ```
 
 ### 手动部署新版本
@@ -69,7 +69,7 @@ curl http://localhost:5000/api/data
 ```bash
 crontab -e
 # 添加以下行：
-*/5 * * * * cd /home/runner/work/yahoo/yahoo && ./deploy.sh >> /var/log/yahoo-deploy.log 2>&1
+*/5 * * * * cd /home/runner/work/yahoo/yahoo && ./deploy.sh >> ~/yahoo-deploy.log 2>&1
 ```
 
 ### 查看Cron任务

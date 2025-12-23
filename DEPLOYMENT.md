@@ -94,13 +94,13 @@ crontab -e
 添加以下行：
 
 ```bash
-*/5 * * * * cd /home/runner/work/yahoo/yahoo && ./deploy.sh >> /var/log/yahoo-deploy.log 2>&1
+*/5 * * * * cd /home/runner/work/yahoo/yahoo && ./deploy.sh >> ~/yahoo-deploy.log 2>&1
 ```
 
 查看部署日志：
 
 ```bash
-tail -f /var/log/yahoo-deploy.log
+tail -f ~/yahoo-deploy.log
 ```
 
 #### 方法2: 使用GitHub Webhooks (推荐用于生产环境)
@@ -122,6 +122,22 @@ tail -f /var/log/yahoo-deploy.log
 cd /home/runner/work/yahoo/yahoo
 ./deploy.sh
 ```
+
+### 8. 配置免密码sudo（可选但推荐）
+
+为了让自动部署能够顺利重启服务，建议配置免密码sudo：
+
+```bash
+sudo visudo
+```
+
+添加以下行（将 `runner` 替换为你的用户名）：
+
+```
+runner ALL=(ALL) NOPASSWD: /bin/systemctl restart yahoo, /bin/systemctl start yahoo, /bin/systemctl status yahoo
+```
+
+保存退出。现在自动部署脚本可以无需密码重启服务。
 
 ## 服务管理命令
 
@@ -235,4 +251,4 @@ sudo netstat -tlnp | grep 5000
 项目的日志文件位置：
 - 应用日志: `./yfinance_server.log`
 - 系统日志: `sudo journalctl -u yahoo`
-- 部署日志: `/var/log/yahoo-deploy.log`
+- 部署日志: `~/yahoo-deploy.log`

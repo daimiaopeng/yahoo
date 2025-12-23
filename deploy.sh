@@ -12,7 +12,9 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # 配置
-REPO_DIR="/home/runner/work/yahoo/yahoo"
+# 自动检测脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="${REPO_DIR:-$SCRIPT_DIR}"
 SERVICE_NAME="yahoo"
 VENV_DIR="venv"
 
@@ -53,7 +55,13 @@ fi
 # 更新依赖
 if [ -f "requirements.txt" ]; then
     echo -e "${YELLOW}更新Python依赖...${NC}"
-    pip install -r requirements.txt --upgrade
+    pip install -r requirements.txt
+fi
+
+# 检查是否有sudo权限
+if ! sudo -n true 2>/dev/null; then
+    echo -e "${YELLOW}警告: 需要sudo权限来重启服务${NC}"
+    echo -e "${YELLOW}请确保当前用户有sudo权限或配置了NOPASSWD${NC}"
 fi
 
 # 重启服务

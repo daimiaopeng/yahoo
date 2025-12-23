@@ -80,7 +80,7 @@ GET /api/status
 ```bash
 crontab -e
 # 添加：
-*/5 * * * * cd /path/to/yahoo && ./deploy.sh >> /var/log/yahoo-deploy.log 2>&1
+*/5 * * * * cd /path/to/yahoo && ./deploy.sh >> ~/yahoo-deploy.log 2>&1
 ```
 
 ## 文件说明

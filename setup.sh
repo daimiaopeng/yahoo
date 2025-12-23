@@ -116,7 +116,7 @@ echo -e "${YELLOW}是否要设置cron定时任务自动检查GitHub更新？[y/N
 read -r cron_response
 
 if [[ "$cron_response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-    CRON_JOB="*/5 * * * * cd $REPO_DIR && ./deploy.sh >> /var/log/yahoo-deploy.log 2>&1"
+    CRON_JOB="*/5 * * * * cd $REPO_DIR && ./deploy.sh >> ~/yahoo-deploy.log 2>&1"
     
     # 检查cron任务是否已存在
     if crontab -l 2>/dev/null | grep -q "deploy.sh"; then
@@ -125,10 +125,17 @@ if [[ "$cron_response" =~ ^([yY][eE][sS]|[yY])$ ]]; then
         # 添加cron任务
         (crontab -l 2>/dev/null; echo "$CRON_JOB") | crontab -
         echo -e "${GREEN}✓ cron任务已添加（每5分钟检查一次更新）${NC}"
+        echo -e "${YELLOW}日志文件位置: ~/yahoo-deploy.log${NC}"
     fi
     
     echo -e "${YELLOW}查看当前的cron任务:${NC}"
     crontab -l | grep deploy.sh || true
+    
+    echo ""
+    echo -e "${YELLOW}注意: 自动部署需要sudo权限来重启服务${NC}"
+    echo -e "${YELLOW}如需免密码sudo，可以配置sudoers:${NC}"
+    echo -e "  sudo visudo"
+    echo -e "  添加: $CURRENT_USER ALL=(ALL) NOPASSWD: /bin/systemctl restart yahoo, /bin/systemctl start yahoo, /bin/systemctl status yahoo"
 fi
 
 echo ""
