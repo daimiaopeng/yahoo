@@ -1,0 +1,150 @@
+---
+# Yahoo Finance Server - Docker回滚 Playbook
+# 用法: ansible-playbook -i inventory.ini playbooks/rollback.yml -e rollback_commit=abc1234
+# 或回滚到上一版本: ansible-playbook -i inventory.ini playbooks/rollback.yml -e rollback_steps=1
+
+- name: 回滚 Yahoo Finance Server (Docker)
+  hosts: yahoo_servers
+  become: yes
+  become_user: "{{ service_user }}"
+
+  vars:
+    rollback_commit: "" # 指定回滚到的commit hash
+    rollback_steps: 0 # 或者指定回滚N个版本 (HEAD~N)
+
+  tasks:
+    - name: 验证回滚参数
+      fail:
+        msg: "必须指定 rollback_commit 或 rollback_steps 参数"
+      when: (rollback_commit == "") and (rollback_steps == 0)
+
+    - name: 获取当前版本
+      shell: git rev-parse HEAD
+      args:
+        chdir: "{{ project_dir }}"
+      register: current_commit
+      changed_when: false
+
+    - name: 显示当前版本
+      debug:
+        msg: "当前版本: {{ current_commit.stdout }}"
+
+    - name: 获取回滚目标版本 (通过steps)
+      shell: git rev-parse HEAD~{{ rollback_steps }}
+      args:
+        chdir: "{{ project_dir }}"
+      register: target_by_steps
+      when: rollback_steps > 0
+      changed_when: false
+
+    - name: 设置回滚目标
+      set_fact:
+        target_commit: "{{ rollback_commit if rollback_commit != '' else target_by_steps.stdout }}"
+
+    - name: 显示回滚目标
+      debug:
+        msg: "回滚目标: {{ target_commit }}"
+
+    - name: 确认回滚目标存在
+      shell: git cat-file -t {{ target_commit }}
+      args:
+        chdir: "{{ project_dir }}"
+      register: commit_check
+      changed_when: false
+      failed_when: commit_check.rc != 0
+
+    - name: 显示目标提交信息
+      shell: git log -1 --pretty=format:"%h - %s (%ci)" {{ target_commit }}
+      args:
+        chdir: "{{ project_dir }}"
+      register: target_info
+      changed_when: false
+
+    - name: 回滚目标信息
+      debug:
+        msg: "目标提交: {{ target_info.stdout }}"
+
+    # ========== 备份当前状态 ==========
+    - name: 创建备份目录
+      become: yes
+      become_user: root
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        owner: "{{ service_user }}"
+        group: "{{ service_user }}"
+        mode: "0755"
+
+    - name: 备份当前数据库
+      copy:
+        src: "{{ db_path }}"
+        dest: "{{ backup_dir }}/market_data_before_rollback_{{ ansible_date_time.iso8601_basic_short }}.db"
+        remote_src: yes
+      ignore_errors: yes
+
+    - name: 保存当前镜像标签
+      shell: docker tag {{ docker_image_name }}:{{ docker_image_tag }} {{ docker_image_name }}:rollback-backup
+      ignore_errors: yes
+
+    # ========== 执行回滚 ==========
+    - name: 执行Git回滚
+      shell: git checkout {{ target_commit }}
+      args:
+        chdir: "{{ project_dir }}"
+      register: checkout_result
+
+    - name: 停止当前容器
+      shell: docker compose -f deploy/docker-compose.yml down
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: 重新构建镜像
+      shell: docker compose -f deploy/docker-compose.yml build --no-cache
+      args:
+        chdir: "{{ project_dir }}"
+      register: build_result
+
+    - name: 启动新容器
+      shell: docker compose -f deploy/docker-compose.yml up -d
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: 等待容器启动
+      pause:
+        seconds: 10
+
+    # ========== 验证回滚 ==========
+    - name: 检查容器健康状态
+      shell: docker inspect --format='{{ '{{' }}.State.Health.Status{{ '}}' }}' {{ docker_container_name }}
+      register: health_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 验证API响应
+      uri:
+        url: "http://127.0.0.1:{{ service_port }}/api/status"
+        method: GET
+        return_content: yes
+        timeout: 10
+      register: api_response
+      ignore_errors: yes
+      retries: 3
+      delay: 5
+
+    - name: 回滚结果汇总
+      debug:
+        msg: |
+          ==========================================
+          Docker回滚完成！
+          原版本: {{ current_commit.stdout[:8] }}
+          回滚到: {{ target_commit[:8] }}
+          目标提交: {{ target_info.stdout }}
+          容器健康: {{ health_status.stdout | default('未知') }}
+          API状态: {{ api_response.status | default('无法连接') }}
+          ==========================================
+
+          注意: 当前处于detached HEAD状态
+          如需回到main分支: git checkout main
+
+          如需恢复到回滚前的镜像:
+          docker tag {{ docker_image_name }}:rollback-backup {{ docker_image_name }}:{{ docker_image_tag }}

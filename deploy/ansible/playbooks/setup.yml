@@ -1,0 +1,210 @@
+---
+# Yahoo Finance Server - Docker环境初始安装 Playbook
+# 用法: ansible-playbook -i inventory.ini playbooks/setup.yml
+# 注意: 这个playbook需要root权限，用于首次安装配置
+
+- name: 初始安装 Yahoo Finance Server (Docker环境)
+  hosts: yahoo_servers
+  become: yes
+
+  tasks:
+    # ========== 系统更新 ==========
+    - name: 更新apt缓存 (Debian/Ubuntu)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    # ========== 安装Docker依赖 ==========
+    - name: 安装必要的系统包 (Debian/Ubuntu)
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - git
+        state: present
+      when: ansible_os_family == "Debian"
+
+    # ========== 安装Docker ==========
+    - name: 检查Docker是否已安装
+      command: docker --version
+      register: docker_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: 添加Docker GPG密钥 (Debian/Ubuntu)
+      shell: |
+        install -m 0755 -d /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        chmod a+r /etc/apt/keyrings/docker.asc
+      when: docker_check.rc != 0 and ansible_os_family == "Debian"
+
+    - name: 添加Docker仓库 (Debian/Ubuntu)
+      shell: |
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+      when: docker_check.rc != 0 and ansible_os_family == "Debian"
+
+    - name: 更新apt缓存
+      apt:
+        update_cache: yes
+      when: docker_check.rc != 0 and ansible_os_family == "Debian"
+
+    - name: 安装Docker (Debian/Ubuntu)
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+      when: docker_check.rc != 0 and ansible_os_family == "Debian"
+
+    # ========== 安装Docker (RedHat/CentOS) ==========
+    - name: 安装yum-utils (RedHat/CentOS)
+      yum:
+        name: yum-utils
+        state: present
+      when: docker_check.rc != 0 and ansible_os_family == "RedHat"
+
+    - name: 添加Docker仓库 (RedHat/CentOS)
+      command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+      when: docker_check.rc != 0 and ansible_os_family == "RedHat"
+
+    - name: 安装Docker (RedHat/CentOS)
+      yum:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+      when: docker_check.rc != 0 and ansible_os_family == "RedHat"
+
+    # ========== 配置Docker ==========
+    - name: 启动Docker服务
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: 创建服务用户
+      user:
+        name: "{{ service_user }}"
+        shell: /bin/bash
+        create_home: yes
+        groups: docker
+        append: yes
+
+    - name: 确保docker组存在
+      group:
+        name: docker
+        state: present
+
+    - name: 将用户添加到docker组
+      user:
+        name: "{{ service_user }}"
+        groups: docker
+        append: yes
+
+    # ========== 克隆代码仓库 ==========
+    - name: 创建项目父目录
+      file:
+        path: "{{ project_dir | dirname }}"
+        state: directory
+        owner: "{{ service_user }}"
+        group: "{{ service_user }}"
+        mode: "0755"
+        recurse: yes
+
+    - name: 克隆代码仓库
+      become_user: "{{ service_user }}"
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ project_dir }}"
+        version: "{{ repo_branch }}"
+        clone: yes
+        update: yes
+
+    # ========== 构建和启动容器 ==========
+    - name: 构建Docker镜像
+      become_user: "{{ service_user }}"
+      shell: docker compose -f deploy/docker-compose.yml build
+      args:
+        chdir: "{{ project_dir }}"
+      register: build_result
+
+    - name: 启动Docker容器
+      become_user: "{{ service_user }}"
+      shell: docker compose -f deploy/docker-compose.yml up -d
+      args:
+        chdir: "{{ project_dir }}"
+      register: up_result
+
+    # ========== 配置防火墙 ==========
+    - name: 开放服务端口 (ufw)
+      ufw:
+        rule: allow
+        port: "{{ service_port }}"
+        proto: tcp
+      when: ansible_os_family == "Debian"
+      ignore_errors: yes
+
+    - name: 开放服务端口 (firewalld)
+      firewalld:
+        port: "{{ service_port }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      when: ansible_os_family == "RedHat"
+      ignore_errors: yes
+
+    # ========== 验证安装 ==========
+    - name: 等待容器完全启动
+      pause:
+        seconds: 15
+
+    - name: 检查容器状态
+      become_user: "{{ service_user }}"
+      shell: docker compose -f deploy/docker-compose.yml ps
+      args:
+        chdir: "{{ project_dir }}"
+      register: container_status
+      changed_when: false
+
+    - name: 验证API响应
+      uri:
+        url: "http://127.0.0.1:{{ service_port }}/api/status"
+        method: GET
+        return_content: yes
+        timeout: 15
+      register: api_response
+      ignore_errors: yes
+      retries: 3
+      delay: 5
+
+    - name: 安装结果汇总
+      debug:
+        msg: |
+          ==========================================
+          Yahoo Finance Server Docker安装完成！
+
+          容器状态:
+          {{ container_status.stdout | indent(10) }}
+
+          API状态: {{ api_response.status | default('无法连接') }}
+
+          项目目录: {{ project_dir }}
+          服务端口: {{ service_port }}
+
+          管理命令:
+          - 查看容器: docker compose ps
+          - 查看日志: docker compose logs -f
+          - 重启容器: docker compose restart
+          - 停止容器: docker compose down
+          - 启动容器: docker compose up -d
+          ==========================================

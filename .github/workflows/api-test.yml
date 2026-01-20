@@ -1,0 +1,255 @@
+name: Yahoo Finance API CI/CD
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: "Force build and deploy"
+        required: false
+        default: true
+        type: boolean
+
+env:
+  DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/yahoo-finance-server
+  DOCKER_TAG: latest
+
+jobs:
+  # ========== 测试阶段 ==========
+  test-database:
+    name: 数据库单元测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 运行数据库测试
+        run: export PYTHONPATH=$PYTHONPATH:src && python tests/test_database.py
+
+  test-api:
+    name: API集成测试
+    needs: test-database
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 启动API服务器
+        run: |
+          cd src
+          python main.py > ../server.log 2>&1 &
+          echo "Server started with PID $!"
+          for i in {1..20}; do
+            if curl -s http://localhost:5000/api/health > /dev/null; then
+              echo "Server is up!"
+              break
+            fi
+            echo "Waiting for server... ($i/20)"
+            sleep 3
+          done
+
+      - name: 运行API测试
+        run: python tests/test_api.py
+
+      - name: 上传日志
+        if: failure() || always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-log
+          path: server.log
+
+  # ========== 变更检查 ==========
+  check-changes:
+    name: 检查文件变更
+    runs-on: ubuntu-latest
+    # Allow manual trigger or push to main
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    outputs:
+      should_build: ${{ steps.check_step.outputs.should_build }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            src:
+              - 'src/**'
+              - 'deploy/Dockerfile'
+              - 'requirements.txt'
+              - '.github/workflows/**'
+      
+      - name: Determine Build Necessity
+        id: check_step
+        run: |
+          echo "Event Name: ${{ github.event_name }}"
+          echo "Filter Output: ${{ steps.filter.outputs.src }}"
+          
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "Manual trigger detected. Forcing build."
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          elif [[ "${{ steps.filter.outputs.src }}" == "true" ]]; then
+            echo "Changes detected. Triggering build."
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          else
+            echo "No changes and not manual. Skipping build."
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          fi
+
+  # ========== Docker构建和推送 ==========
+  build-and-push:
+    name: 构建并推送到Docker Hub
+    needs: [test-api, check-changes]
+    runs-on: ubuntu-latest
+    # Run if manual trigger OR changes detected (determined by check-changes)
+    if: needs.check-changes.outputs.should_build == 'true'
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查Docker Hub配置
+        id: check-docker
+        run: |
+          if [ -n "${{ secrets.DOCKERHUB_USERNAME }}" ] && [ -n "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::warning::Docker Hub未配置，跳过镜像推送"
+          fi
+
+      - name: 设置 Docker Buildx
+        if: steps.check-docker.outputs.configured == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 Docker Hub
+        if: steps.check-docker.outputs.configured == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 提取元数据
+        if: steps.check-docker.outputs.configured == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=
+            type=raw,value={{date 'YYYYMMDD-HHmmss'}}
+
+      - name: 构建并推送镜像
+        if: steps.check-docker.outputs.configured == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 输出镜像信息
+        if: steps.check-docker.outputs.configured == 'true'
+        run: |
+          echo "### 🐳 Docker镜像已推送" >> $GITHUB_STEP_SUMMARY
+          echo "镜像: ${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+
+  # ========== Ansible远程部署 ==========
+  deploy-ansible:
+    name: Ansible远程部署
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: always() && needs.build-and-push.result == 'success'
+
+    steps:
+      - name: 检查Ansible配置
+        id: check-ansible
+        run: |
+          if [ -n "${{ secrets.SERVER_PASSWORD }}" ] && [ -n "${{ secrets.SERVER_HOST }}" ] && [ -n "${{ secrets.SERVER_USER }}" ]; then
+            echo "configured=true" >> $GITHUB_OUTPUT
+          else
+            echo "configured=false" >> $GITHUB_OUTPUT
+            echo "::notice::Ansible未配置 (缺少 SERVER_PASSWORD)，跳过远程部署"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.check-ansible.outputs.configured == 'true'
+
+      - name: 设置 Python
+        if: steps.check-ansible.outputs.configured == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装 Ansible 和 sshpass
+        if: steps.check-ansible.outputs.configured == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+          pip install ansible
+
+      - name: 取消 Host Key Checking
+        if: steps.check-ansible.outputs.configured == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          echo "Host *" > ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  UserKnownHostsFile /dev/null" >> ~/.ssh/config
+
+      - name: 创建inventory
+        if: steps.check-ansible.outputs.configured == 'true'
+        run: |
+          cat > deploy/ansible/inventory.ini << EOF
+          [yahoo_servers]
+          production ansible_host=${{ secrets.SERVER_HOST }} ansible_user=${{ secrets.SERVER_USER }}
+
+          [yahoo_servers:vars]
+          ansible_python_interpreter=/usr/bin/python3
+          ansible_password=${{ secrets.SERVER_PASSWORD }}
+          ansible_become_password=${{ secrets.SERVER_PASSWORD }}
+          EOF
+
+      - name: 运行Ansible部署
+        if: steps.check-ansible.outputs.configured == 'true'
+        working-directory: deploy/ansible
+        run: |
+          ansible-playbook playbooks/deploy.yml \
+            -e "docker_image_name=${{ secrets.DOCKERHUB_USERNAME }}/yahoo-finance-server" \
+            -e "docker_image_tag=latest" \
+            -e "use_dockerhub=true"
+
+      - name: 部署结果
+        if: steps.check-ansible.outputs.configured == 'true'
+        run: echo "### ✅ 已部署到 ${{ secrets.SERVER_HOST }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: 跳过提示
+        if: steps.check-ansible.outputs.configured == 'false'
+        run: echo "### ⏭️ Ansible未配置，已跳过" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,132 @@
+---
+# Yahoo Finance Server - Docker状态检查 Playbook
+# 用法: ansible-playbook -i inventory.ini playbooks/status.yml
+
+- name: 检查 Yahoo Finance Server 状态 (Docker)
+  hosts: yahoo_servers
+  become: yes
+  become_user: "{{ service_user }}"
+
+  tasks:
+    - name: 获取Git版本
+      shell: git rev-parse HEAD
+      args:
+        chdir: "{{ project_dir }}"
+      register: git_version
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 获取Git分支
+      shell: git branch --show-current
+      args:
+        chdir: "{{ project_dir }}"
+      register: git_branch
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 获取最新提交信息
+      shell: git log -1 --pretty=format:"%h - %s (%ci)"
+      args:
+        chdir: "{{ project_dir }}"
+      register: git_log
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 检查容器状态
+      shell: docker compose -f deploy/docker-compose.yml ps --format "table {{ '{{' }}.Name{{ '}}' }}\t{{ '{{' }}.Status{{ '}}' }}\t{{ '{{' }}.Ports{{ '}}' }}"
+      args:
+        chdir: "{{ project_dir }}"
+      register: container_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 检查容器健康状态
+      shell: docker inspect --format='{{ '{{' }}.State.Health.Status{{ '}}' }}' {{ docker_container_name }}
+      register: health_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 获取容器运行时间
+      shell: docker inspect --format='{{ '{{' }}.State.StartedAt{{ '}}' }}' {{ docker_container_name }}
+      register: container_uptime
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 获取容器资源使用
+      shell: docker stats {{ docker_container_name }} --no-stream --format "CPU:{{ '{{' }}.CPUPerc{{ '}}' }} MEM:{{ '{{' }}.MemUsage{{ '}}' }}"
+      register: container_stats
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 验证API响应
+      uri:
+        url: "http://127.0.0.1:{{ service_port }}/api/status"
+        method: GET
+        return_content: yes
+        timeout: 10
+      register: api_response
+      ignore_errors: yes
+
+    - name: 检查Docker镜像信息
+      shell: docker images {{ docker_image_name }}:{{ docker_image_tag }} --format "{{ '{{' }}.Size{{ '}}' }}"
+      register: image_size
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 检查磁盘空间
+      become: yes
+      become_user: root
+      shell: df -h {{ project_dir }}
+      register: disk_info
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 检查数据库大小
+      stat:
+        path: "{{ db_path }}"
+      register: db_stat
+      ignore_errors: yes
+
+    - name: 获取最近日志
+      shell: docker compose -f deploy/docker-compose.yml logs --tail=5 2>&1
+      args:
+        chdir: "{{ project_dir }}"
+      register: recent_logs
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 状态汇总
+      debug:
+        msg: |
+          ==========================================
+          Yahoo Finance Server Docker状态报告
+          主机: {{ inventory_hostname }}
+          时间: {{ ansible_date_time.iso8601 }}
+          ==========================================
+
+          Git信息:
+          - 当前分支: {{ git_branch.stdout | default('未知') }}
+          - 当前版本: {{ git_version.stdout[:8] | default('未知') }}
+          - 最新提交: {{ git_log.stdout | default('未知') }}
+
+          Docker信息:
+          - 镜像大小: {{ image_size.stdout | default('未知') }}
+          - 容器健康: {{ health_status.stdout | default('未知') }}
+          - 启动时间: {{ container_uptime.stdout | default('未知') }}
+          - 资源使用: {{ container_stats.stdout | default('未知') }}
+
+          容器状态:
+          {{ container_status.stdout | default('无法获取') | indent(10) }}
+
+          API状态:
+          - HTTP状态码: {{ api_response.status | default('无法连接') }}
+
+          资源使用:
+          - 数据库大小: {{ (db_stat.stat.size / 1024 / 1024) | round(2) | string + ' MB' if db_stat.stat is defined and db_stat.stat.exists else '不存在' }}
+
+          磁盘空间:
+          {{ disk_info.stdout | default('无法获取') | indent(10) }}
+
+          最近日志:
+          {{ recent_logs.stdout | default('无法获取') | indent(10) }}
+          ==========================================

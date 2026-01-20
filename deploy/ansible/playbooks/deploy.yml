@@ -1,0 +1,238 @@
+---
+# Yahoo Finance Server - Docker部署 Playbook (支持Docker Hub)
+# 用法: ansible-playbook -i inventory.ini playbooks/deploy.yml
+# 从Docker Hub拉取: ansible-playbook -i inventory.ini playbooks/deploy.yml -e use_dockerhub=true
+# 强制重建本地镜像: ansible-playbook -i inventory.ini playbooks/deploy.yml -e force_build=true
+
+- name: 部署 Yahoo Finance Server (Docker)
+  hosts: yahoo_servers
+  become: yes
+
+  vars:
+    force_build: false # 强制重新构建本地镜像
+    use_dockerhub: false # 是否从Docker Hub拉取镜像
+
+  tasks:
+    # ========== 预检查 ==========
+    - name: 检查Docker是否安装
+      command: docker --version
+      register: docker_version
+      changed_when: false
+      failed_when: docker_version.rc != 0
+
+    - name: 检查docker-compose是否安装
+      command: docker compose version
+      register: compose_version
+      changed_when: false
+      failed_when: compose_version.rc != 0
+
+    - name: 检查项目目录是否存在
+      stat:
+        path: "{{ project_dir }}"
+      register: project_dir_stat
+
+    - name: 如果项目目录不存在则克隆仓库
+      become_user: "{{ service_user }}"
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ project_dir }}"
+        version: "{{ repo_branch }}"
+        clone: yes
+      when: not project_dir_stat.stat.exists
+
+    # ========== 获取当前版本 ==========
+    - name: 获取当前Git版本
+      become_user: "{{ service_user }}"
+      shell: git rev-parse HEAD
+      args:
+        chdir: "{{ project_dir }}"
+      register: current_commit
+      changed_when: false
+
+    - name: 显示当前版本
+      debug:
+        msg: "当前版本: {{ current_commit.stdout }}"
+
+    # ========== 拉取最新代码 ==========
+    - name: 从GitHub拉取最新代码
+      become_user: "{{ service_user }}"
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ project_dir }}"
+        version: "{{ repo_branch }}"
+        update: yes
+        force: yes
+      register: git_result
+
+    - name: 获取更新后的Git版本
+      become_user: "{{ service_user }}"
+      shell: git rev-parse HEAD
+      args:
+        chdir: "{{ project_dir }}"
+      register: new_commit
+      changed_when: false
+
+    - name: 显示最新版本
+      debug:
+        msg: "最新版本: {{ new_commit.stdout }}"
+
+    # ========== 检查是否需要部署 ==========
+    - name: 设置部署标志
+      set_fact:
+        need_deploy: "{{ (not project_dir_stat.stat.exists) or (current_commit.stdout != new_commit.stdout) or (force_build | bool) or (use_dockerhub | bool) }}"
+
+    - name: 检测到更新
+      debug:
+        msg: "检测到新版本，开始部署..."
+      when: need_deploy
+
+    - name: 没有更新
+      debug:
+        msg: "没有新的更新，跳过部署"
+      when: not need_deploy
+
+    # ========== 备份当前数据库 ==========
+    - name: 创建备份目录
+      file:
+        path: "{{ backup_dir }}"
+        state: directory
+        owner: "{{ service_user }}"
+        group: "{{ service_user }}"
+        mode: "0755"
+      when: need_deploy and backup_enabled
+
+    - name: 备份当前数据库
+      copy:
+        src: "{{ db_path }}"
+        dest: "{{ backup_dir }}/market_data_{{ ansible_date_time.iso8601_basic_short }}.db"
+        remote_src: yes
+      when: need_deploy and backup_enabled
+      ignore_errors: yes
+
+    - name: 确保数据库文件存在
+      file:
+        path: "{{ db_path }}"
+        state: touch
+        owner: "{{ service_user }}"
+        group: "{{ service_user }}"
+        mode: "0644"
+      when: need_deploy
+
+    # ========== Docker Hub模式：拉取镜像 ==========
+    - name: 从Docker Hub拉取最新镜像
+      become_user: "{{ service_user }}"
+      shell: docker pull {{ docker_image_name }}:{{ docker_image_tag }}
+      when: need_deploy and (use_dockerhub | bool)
+      register: pull_result
+
+    - name: 显示拉取结果
+      debug:
+        msg: "{{ pull_result.stdout_lines | default([]) }}"
+      when: need_deploy and (use_dockerhub | bool)
+
+    # ========== 本地构建模式：构建镜像 ==========
+    - name: 构建Docker镜像（本地模式）
+      become_user: "{{ service_user }}"
+      shell: docker compose -f deploy/docker-compose.yml build --no-cache
+      args:
+        chdir: "{{ project_dir }}"
+      when: need_deploy and not (use_dockerhub | bool)
+      register: build_result
+
+    # ========== 停止并启动容器 ==========
+    - name: 停止旧容器
+      become_user: "{{ service_user }}"
+      shell: docker compose -f deploy/docker-compose.yml down
+      args:
+        chdir: "{{ project_dir }}"
+      when: need_deploy
+      ignore_errors: yes
+
+    - name: 更新docker-compose.yml使用Docker Hub镜像
+      become_user: "{{ service_user }}"
+      lineinfile:
+        path: "{{ project_dir }}/deploy/docker-compose.yml"
+        regexp: '^\s*image:'
+        line: "    image: {{ docker_image_name }}:{{ docker_image_tag }}"
+      when: need_deploy and (use_dockerhub | bool)
+
+    - name: 启动新容器
+      become_user: "{{ service_user }}"
+      shell: docker compose -f deploy/docker-compose.yml up -d
+      args:
+        chdir: "{{ project_dir }}"
+      when: need_deploy
+      register: up_result
+
+    - name: 等待容器启动
+      pause:
+        seconds: 10
+      when: need_deploy
+
+    # ========== 验证部署 ==========
+    - name: 检查容器状态
+      become_user: "{{ service_user }}"
+      shell: docker compose -f deploy/docker-compose.yml ps --format json
+      args:
+        chdir: "{{ project_dir }}"
+      register: container_status
+      changed_when: false
+
+    - name: 检查容器健康状态
+      become_user: "{{ service_user }}"
+      shell: docker inspect --format='{{ "{{" }}.State.Health.Status{{ "}}" }}' {{ docker_container_name }}
+      register: health_status
+      changed_when: false
+      ignore_errors: yes
+
+    - name: 验证API响应
+      uri:
+        url: "http://127.0.0.1:{{ service_port }}/api/status"
+        method: GET
+        return_content: yes
+        timeout: 10
+      register: api_response
+      when: need_deploy
+      ignore_errors: yes
+      retries: 3
+      delay: 5
+
+    - name: 显示API响应
+      debug:
+        msg: "API响应: {{ api_response.json | default('无法连接') }}"
+      when: need_deploy
+
+    # ========== 清理 ==========
+    - name: 清理悬空镜像
+      become_user: "{{ service_user }}"
+      shell: docker image prune -f
+      when: need_deploy
+      ignore_errors: yes
+
+    - name: 列出所有备份文件
+      find:
+        paths: "{{ backup_dir }}"
+        patterns: "market_data_*.db"
+      register: backup_files
+      when: backup_enabled
+
+    - name: 清理超过限制的旧备份
+      file:
+        path: "{{ item.path }}"
+        state: absent
+      with_items: "{{ (backup_files.files | sort(attribute='mtime') | list)[:-max_backups] }}"
+      when: backup_enabled and (backup_files.files | length > max_backups)
+
+    # ========== 部署结果汇总 ==========
+    - name: 部署结果汇总
+      debug:
+        msg: |
+          ==========================================
+          Docker部署完成！
+          部署模式: {{ 'Docker Hub' if (use_dockerhub | bool) else '本地构建' }}
+          原版本: {{ current_commit.stdout[:8] }}
+          新版本: {{ new_commit.stdout[:8] }}
+          是否更新: {{ need_deploy }}
+          容器健康: {{ health_status.stdout | default('未知') }}
+          API状态: {{ api_response.status | default('未检查') }}
+          ==========================================

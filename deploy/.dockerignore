@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+
+# 不需要打包进镜像
+deploy/ansible/
+scripts/
+tests/
+.github/
+*.md
+*.service
+
+# 数据文件
+*.db
+*.log
+yf_cache/
+
+# 其他
+.DS_Store
+Thumbs.db

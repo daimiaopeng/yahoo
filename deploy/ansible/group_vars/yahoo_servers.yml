@@ -1,0 +1,30 @@
+# Yahoo Finance Server - Ansible组变量配置 (Docker版本)
+# 这里定义部署相关的变量，可根据实际情况修改
+
+# 项目目录配置
+project_dir: "/home/runner/work/yahoo/yahoo"
+repo_url: "https://github.com/daimiaopeng/yahoo.git"
+repo_branch: "main"
+
+# Docker配置
+docker_image_name: "yahoo-finance-server"
+docker_image_tag: "latest"
+docker_container_name: "yahoo-finance"
+docker_network_name: "yahoo-finance-network"
+
+# 服务配置
+service_user: "{{ ansible_user }}"
+service_port: 5000
+
+# 数据持久化
+data_volume_name: "yahoo-finance-data"
+db_path: "{{ project_dir }}/market_data.db"
+
+# 部署配置
+backup_enabled: true
+backup_dir: "/home/runner/backups/yahoo"
+max_backups: 3 # 保留最近N个备份
+
+# 超时设置（秒）
+git_timeout: 120
+docker_build_timeout: 600

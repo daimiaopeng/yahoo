@@ -1,0 +1,41 @@
+# Yahoo Finance Server - Docker Compose配置
+# 用法: docker compose -f deploy/docker-compose.yml up -d
+
+services:
+  yahoo-finance:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: yahoo-finance-server:latest
+    container_name: yahoo-finance
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - yahoo-data:/app/data
+      - ../market_data.db:/app/market_data.db
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - yahoo-network
+
+volumes:
+  yahoo-data:
+    name: yahoo-finance-data
+
+networks:
+  yahoo-network:
+    name: yahoo-finance-network
+    driver: bridge
