@@ -115,7 +115,7 @@
         state: touch
         owner: "{{ service_user }}"
         group: "{{ service_user }}"
-        mode: "0644"
+        mode: "0666"
       when: need_deploy
 
     # ========== Docker Hub模式：拉取镜像 ==========

@@ -36,7 +36,7 @@ COPY --from=builder /install /usr/local
 COPY --chown=appuser:appuser src/ ./
 
 # 创建数据目录并设置权限
-RUN mkdir -p /app/data && chown appuser:appuser /app/data
+RUN mkdir -p /app/data && chown -R appuser:appuser /app
 
 # 切换用户
 USER appuser
