@@ -487,6 +487,11 @@ def test_api():
     """测试接口 - 快速验证API功能"""
     results = {
         'timestamp': datetime.now().isoformat(),
+        'system': {
+            'version': VERSION,
+            'commit_time': COMMIT_TIME,
+            'environment': os.getenv('FLASK_ENV', 'production')
+        },
         'tests': []
     }
 

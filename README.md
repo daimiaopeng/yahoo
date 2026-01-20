@@ -15,7 +15,7 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 ## 📁 项目结构
 
-```
+```text
 ├── src/                    # 源代码
 │   ├── main.py             # Flask API主程序
 │   └── database.py         # 数据库操作
@@ -33,6 +33,20 @@ docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
 ## 📡 API 接口
+
+### 系统信息
+
+`GET /`
+
+```json
+{
+  "service": "Yahoo Finance API",
+  "version": "e4d2a1b",
+  "commit_time": "2026-01-20 14:30:00 +0800",
+  "status": "running",
+  "timestamp": "2026-01-20T14:35:00.123456"
+}
+```
 
 ### 历史K线数据
 
