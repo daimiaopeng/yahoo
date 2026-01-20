@@ -17,6 +17,8 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
+      - APP_VERSION=${APP_VERSION:-unknown}
+      - APP_COMMIT_TIME=${APP_COMMIT_TIME:-unknown}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:5000/api/health"]
       interval: 30s

@@ -156,11 +156,22 @@
         line: "    image: {{ docker_image_name }}:{{ docker_image_tag }}"
       when: need_deploy and (use_dockerhub | bool)
 
+    - name: 获取最新提交时间
+      become_user: "{{ service_user }}"
+      shell: git show -s --format=%ci HEAD
+      args:
+        chdir: "{{ project_dir }}"
+      register: commit_time
+      changed_when: false
+
     - name: 启动新容器
       become_user: "{{ service_user }}"
       shell: docker compose -f deploy/docker-compose.yml up -d
       args:
         chdir: "{{ project_dir }}"
+      environment:
+        APP_VERSION: "{{ new_commit.stdout[:7] }}"
+        APP_COMMIT_TIME: "{{ commit_time.stdout }}"
       when: need_deploy
       register: up_result
 

@@ -64,6 +64,20 @@ app = Flask(__name__)
 
 # 添加CORS支持（手动实现，避免依赖flask-cors）
 
+VERSION = os.getenv('APP_VERSION', 'local-dev')
+COMMIT_TIME = os.getenv('APP_COMMIT_TIME', 'unknown')
+
+@app.route('/', methods=['GET'])
+def get_version():
+    """获取服务版本信息"""
+    return jsonify({
+        'service': 'Yahoo Finance API',
+        'version': VERSION,
+        'commit_time': COMMIT_TIME,
+        'status': 'running',
+        'timestamp': datetime.now().isoformat()
+    })
+
 
 @app.after_request
 def add_cors_headers(response):
