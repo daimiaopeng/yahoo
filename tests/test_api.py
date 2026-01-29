@@ -29,6 +29,40 @@ def test_health():
         return False
 
 
+def test_root_api_docs():
+    """测试根路径 API 文档接口"""
+    print_header("测试 / (API 文档)")
+    try:
+        resp = requests.get(f"{BASE_URL}/", timeout=5)
+        print(f"状态码: {resp.status_code}")
+        data = resp.json()
+
+        # 验证基本字段
+        required_fields = ['service', 'version', 'commit_time', 'status', 'timestamp', 'endpoints']
+        missing_fields = [f for f in required_fields if f not in data]
+        if missing_fields:
+            print(f"❌ 缺少字段: {missing_fields}")
+            return False
+
+        # 验证 endpoints 数组
+        endpoints = data.get('endpoints', [])
+        print(f"端点数量: {len(endpoints)}")
+
+        # 验证每个端点的结构
+        for endpoint in endpoints:
+            endpoint_fields = ['path', 'method', 'description', 'params', 'example', 'response_example']
+            for field in endpoint_fields:
+                if field not in endpoint:
+                    print(f"❌ 端点 {endpoint.get('path', '?')} 缺少字段: {field}")
+                    return False
+
+        print(f"✅ 所有端点结构验证通过")
+        return resp.status_code == 200 and len(endpoints) >= 9
+    except Exception as e:
+        print(f"错误: {e}")
+        return False
+
+
 def test_benchmarks():
     """测试基准列表接口"""
     print_header("测试 /api/benchmarks")
@@ -191,6 +225,7 @@ def main():
     results = []
 
     # 运行所有测试
+    results.append(("API文档接口", test_root_api_docs()))
     results.append(("健康检查", test_health()))
     results.append(("基准列表", test_benchmarks()))
     results.append(("连接状态", test_status()))

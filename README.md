@@ -34,9 +34,11 @@ docker compose -f deploy/docker-compose.yml up -d --build
 
 ## 📡 API 接口
 
-### 系统信息
+### API 文档 (根路径)
 
 `GET /`
+
+返回服务信息和完整 API 文档，包含所有端点的详细说明。
 
 ```json
 {
@@ -44,9 +46,24 @@ docker compose -f deploy/docker-compose.yml up -d --build
   "version": "e4d2a1b",
   "commit_time": "2026-01-20 14:30:00 +0800",
   "status": "running",
-  "timestamp": "2026-01-20T14:35:00.123456"
+  "timestamp": "2026-01-20T14:35:00.123456",
+  "endpoints": [
+    {
+      "path": "/api/history/<symbol>",
+      "method": "GET",
+      "description": "获取指定股票/ETF 的历史数据",
+      "params": [
+        {"name": "period", "type": "string", "required": false, "default": "1mo", "description": "时间范围", "options": ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "ytd", "max"]},
+        {"name": "interval", "type": "string", "required": false, "default": "1d", "description": "数据间隔", "options": ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"]}
+      ],
+      "example": "/api/history/QQQ?period=1mo&interval=1d",
+      "response_example": {"symbol": "QQQ", "period": "1mo", "interval": "1d", "cached": false, "data": [{"date": "2026-01-01", "open": 450.0, "close": 453.0}]}
+    }
+  ]
 }
 ```
+
+> 完整文档请访问 `GET /` 端点查看所有 9 个 API 的详细说明。
 
 ### 历史K线数据
 

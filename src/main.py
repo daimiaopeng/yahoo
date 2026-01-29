@@ -68,14 +68,142 @@ VERSION = os.getenv('APP_VERSION', 'local-dev')
 COMMIT_TIME = os.getenv('APP_COMMIT_TIME', 'unknown')
 
 @app.route('/', methods=['GET'])
-def get_version():
-    """获取服务版本信息"""
+def get_api_docs():
+    """获取服务信息和完整 API 文档"""
     return jsonify({
         'service': 'Yahoo Finance API',
         'version': VERSION,
         'commit_time': COMMIT_TIME,
         'status': 'running',
-        'timestamp': datetime.now().isoformat()
+        'timestamp': datetime.now().isoformat(),
+        'endpoints': [
+            {
+                'path': '/api/data',
+                'method': 'GET',
+                'description': '获取 WebSocket 实时数据',
+                'params': [],
+                'example': '/api/data',
+                'response_example': {}
+            },
+            {
+                'path': '/api/status',
+                'method': 'GET',
+                'description': '获取连接状态和支持的基准列表',
+                'params': [],
+                'example': '/api/status',
+                'response_example': {
+                    'status': 'connected',
+                    'supported_benchmarks': ['QQQ', 'SPY', 'DIA', 'IWM', 'VTI']
+                }
+            },
+            {
+                'path': '/api/benchmarks',
+                'method': 'GET',
+                'description': '获取支持的基准 ETF 列表',
+                'params': [],
+                'example': '/api/benchmarks',
+                'response_example': {
+                    'benchmarks': [
+                        {'symbol': 'QQQ', 'name': '纳斯达克100 ETF', 'description': '追踪纳斯达克100指数'}
+                    ]
+                }
+            },
+            {
+                'path': '/api/history/<symbol>',
+                'method': 'GET',
+                'description': '获取指定股票/ETF 的历史数据',
+                'params': [
+                    {'name': 'period', 'type': 'string', 'required': False, 'default': '1mo', 'description': '时间范围', 'options': ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', 'ytd', 'max']},
+                    {'name': 'interval', 'type': 'string', 'required': False, 'default': '1d', 'description': '数据间隔', 'options': ['1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo']}
+                ],
+                'example': '/api/history/QQQ?period=1mo&interval=1d',
+                'response_example': {
+                    'symbol': 'QQQ',
+                    'period': '1mo',
+                    'interval': '1d',
+                    'cached': False,
+                    'data': [
+                        {'date': '2026-01-01', 'open': 450.0, 'high': 455.0, 'low': 448.0, 'close': 453.0, 'volume': 50000000, 'change_percent': 0.0}
+                    ]
+                }
+            },
+            {
+                'path': '/api/intraday/<symbol>',
+                'method': 'GET',
+                'description': '获取指定股票的日内分钟级数据',
+                'params': [
+                    {'name': 'interval', 'type': 'string', 'required': False, 'default': '5m', 'description': '数据间隔', 'options': ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']},
+                    {'name': 'period', 'type': 'string', 'required': False, 'default': '1d', 'description': '时间范围', 'options': ['1d', '5d']}
+                ],
+                'example': '/api/intraday/SPY?interval=5m&period=1d',
+                'response_example': {
+                    'symbol': 'SPY',
+                    'period': '1d',
+                    'interval': '5m',
+                    'data': [
+                        {'timestamp': '2026-01-29T09:30:00-05:00', 'open': 500.0, 'high': 501.0, 'low': 499.5, 'close': 500.5, 'volume': 1000000}
+                    ]
+                }
+            },
+            {
+                'path': '/api/compare',
+                'method': 'GET',
+                'description': '对比多个基准的收益率',
+                'params': [
+                    {'name': 'symbols', 'type': 'string', 'required': False, 'default': 'QQQ,SPY', 'description': '逗号分隔的股票代码'},
+                    {'name': 'period', 'type': 'string', 'required': False, 'default': '1mo', 'description': '时间范围'}
+                ],
+                'example': '/api/compare?symbols=QQQ,SPY,DIA&period=3mo',
+                'response_example': {
+                    'period': '3mo',
+                    'benchmarks': {
+                        'QQQ': {'start_price': 430.0, 'end_price': 453.0, 'total_change': 5.35, 'data': []},
+                        'SPY': {'start_price': 480.0, 'end_price': 500.0, 'total_change': 4.17, 'data': []}
+                    }
+                }
+            },
+            {
+                'path': '/api/quote/<symbol>',
+                'method': 'GET',
+                'description': '获取当前实时报价',
+                'params': [],
+                'example': '/api/quote/QQQ',
+                'response_example': {
+                    'symbol': 'QQQ',
+                    'name': 'Invesco QQQ Trust',
+                    'price': 453.25,
+                    'change': 3.15,
+                    'change_percent': 0.70,
+                    'volume': 45000000,
+                    'previous_close': 450.10
+                }
+            },
+            {
+                'path': '/api/health',
+                'method': 'GET',
+                'description': '健康检查接口',
+                'params': [],
+                'example': '/api/health',
+                'response_example': {
+                    'status': 'healthy',
+                    'timestamp': '2026-01-29T13:58:52'
+                }
+            },
+            {
+                'path': '/api/test',
+                'method': 'GET',
+                'description': '测试 API 功能，验证系统是否正常',
+                'params': [],
+                'example': '/api/test',
+                'response_example': {
+                    'timestamp': '2026-01-29T13:58:52',
+                    'system': {'version': '1.0.0', 'commit_time': '...', 'environment': 'production'},
+                    'tests': [
+                        {'name': 'QQQ历史数据', 'status': 'success', 'data_points': 22}
+                    ]
+                }
+            }
+        ]
     })
 
 
