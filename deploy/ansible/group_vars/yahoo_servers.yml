@@ -18,7 +18,7 @@ service_port: 5000
 
 # 数据持久化
 data_volume_name: "yahoo-finance-data"
-db_path: "{{ project_dir }}/market_data.db"
+db_path: "{{ project_dir }}/data/market_data.db"
 
 # 部署配置
 backup_enabled: true

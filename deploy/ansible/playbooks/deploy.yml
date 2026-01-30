@@ -109,6 +109,15 @@
       when: need_deploy and backup_enabled
       ignore_errors: yes
 
+    - name: 确保数据目录存在
+      file:
+        path: "{{ db_path | dirname }}"
+        state: directory
+        owner: "{{ service_user }}"
+        group: "{{ service_user }}"
+        mode: "0755"
+      when: need_deploy
+
     - name: 确保数据库文件存在
       file:
         path: "{{ db_path }}"
