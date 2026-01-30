@@ -121,7 +121,7 @@
         state: directory
         owner: "{{ service_user }}"
         group: "{{ service_user }}"
-        mode: "0755"
+        mode: "0777"
       when: need_deploy
 
     - name: 确保数据库文件存在
