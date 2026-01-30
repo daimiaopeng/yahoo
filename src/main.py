@@ -391,33 +391,40 @@ def fetch_historical_data(symbol, period='1mo', interval='1d'):
             return None
 
     # === 日线数据逻辑 ===
+    
+    # 1. 尝试更新数据 (即使失败也继续读取数据库)
     try:
-        # 1. 获取本地最新日期
+        # 获取本地最新日期
         latest_date = database.get_latest_date(symbol)
 
-        # 2. 决定拉取策略
+        # 决定拉取策略
         if latest_date:
             # 增量更新：从 latest_date 的下一天开始
-            # yfinance 的 start 是包含的，所以如果直接用 latest_date 会重复一天，但 save_daily_data 处理了重复
-            # 也可以简单地拉取 '1mo' 或更短，只要覆盖 new range
-            # 最稳妥是指定 start date
-            start_date = (datetime.strptime(latest_date, '%Y-%m-%d') +
-                          timedelta(days=0)).strftime('%Y-%m-%d')
-            logging.info(f"Incremental update for {symbol} from {start_date}")
-            # 使用 yf.download 可能比 ticker.history 更适合指定日期，但 ticker.history(start=...) 也行
-            ticker = yf.Ticker(symbol)
-            # 只有当今天不是 latest_date 才拉取
+            # start_date 包含 latest_date，yf.download 会处理，但为了稳妥我们检查日期
+            start_date = latest_date # yfinance include start date
+            
+            # 只有当今天不是 latest_date 才拉取 (简单检查)
             if start_date != datetime.now().strftime('%Y-%m-%d'):
+                logging.info(f"Incremental update for {symbol} from {start_date}")
+                ticker = yf.Ticker(symbol)
+                # history(start=...) 会包含 start_date，save_daily_data 使用 REPLACE INTO 所以没问题
                 new_data = ticker.history(start=start_date, interval='1d')
-                database.save_daily_data(symbol, new_data)
+                if not new_data.empty:
+                    database.save_daily_data(symbol, new_data)
         else:
             # 全量拉取
             logging.info(f"Full fetch for {symbol}")
             ticker = yf.Ticker(symbol)
             new_data = ticker.history(period='max', interval='1d')
-            database.save_daily_data(symbol, new_data)
+            if not new_data.empty:
+                database.save_daily_data(symbol, new_data)
 
-        # 3. 从数据库查询所需数据
+    except Exception as e:
+        # 记录错误但不中断，继续尝试读取数据库
+        logging.error(f"Failed to update data for {symbol} (using cached if available): {e}")
+
+    # 2. 从数据库查询所需数据
+    try:
         query_start = get_start_date_from_period(period)
         query_start_str = query_start.strftime(
             '%Y-%m-%d') if query_start else None
@@ -693,7 +700,15 @@ def compare_benchmarks():
 
     result = {}
     for symbol in symbols:
-        data = fetch_historical_data(symbol, period)
+        # 尝试使用内存缓存
+        data = get_cached_data(symbol, period)
+        
+        if not data:
+            data = fetch_historical_data(symbol, period)
+            # 如果获取成功，写入缓存
+            if data:
+                set_cached_data(symbol, period, data)
+                
         if data:
             result[symbol] = {
                 'data': data,
