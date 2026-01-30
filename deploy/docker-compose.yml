@@ -13,8 +13,9 @@ services:
       - "5000:5000"
     volumes:
       - yahoo-data:/app/data
-      - ../market_data.db:/app/market_data.db
+      - ../data:/app/data
     environment:
+      - DB_PATH=/app/data/market_data.db
       - TZ=Asia/Shanghai
       - PYTHONUNBUFFERED=1
       - APP_VERSION=${APP_VERSION:-unknown}

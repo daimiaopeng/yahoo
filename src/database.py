@@ -8,7 +8,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DB_FILE = 'market_data.db'
+DB_FILE = os.getenv('DB_PATH', 'market_data.db')
 
 
 def get_db_connection():
