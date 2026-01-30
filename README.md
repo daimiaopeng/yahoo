@@ -1,6 +1,6 @@
 # Yahoo Finance Server
 
-基于 Flask 和 yfinance 的股票数据服务器。
+基于 Flask 和 yfinance 的股票数据服务器。支持历史数据、日内分钟级数据，以 WebSocket 实时数据流管理（支持动态订阅和热门股票自动发现）。
 
 ## 🚀 快速开始
 
@@ -120,13 +120,70 @@ docker compose -f deploy/docker-compose.yml up -d --build
 }
 ```
 
+### 实时数据 (WebSocket)
+
+#### 获取单股实时数据 (自动订阅)
+
+`GET /api/realtime/<symbol>`
+
+```json
+{
+  "symbol": "AAPL",
+  "status": "ok",
+  "data": {
+    "price": 178.25,
+    "change": 1.5,
+    "volume": 5000000,
+    "timestamp": "2026-01-20T14:35:00.123"
+  }
+}
+```
+
+> **说明**: 如果该符号尚未订阅，系统会自动将其添加到 WebSocket 订阅列表中。
+
+#### 批量获取实时数据
+
+`GET /api/realtime?symbols=QQQ,SPY,NVDA`
+
+```json
+{
+  "status": "ok",
+  "results": {
+    "QQQ": { "status": "ok", "data": {...} },
+    "NVDA": { "status": "subscribed", "message": "刚添加订阅，尚无数据", "data": null }
+  }
+}
+```
+
+#### 查看订阅状态
+
+`GET /api/subscriptions`
+
+```json
+{
+  "subscribed_count": 55,
+  "data_count": 48,
+  "subscribed_symbols": ["QQQ", "SPY", "NVDA", ...],
+  "symbols_with_data": ["QQQ", "SPY", ...]
+}
+```
+
 ### 其他接口
 
 | 接口 | 说明 |
 |------|------|
 | `GET /api/benchmarks` | 基准列表 |
+| `GET /api/data` | 返回QQQ实时数据 |
 | `GET /api/health` | 健康检查 |
 | `GET /api/status` | 连接状态 |
+| `GET /api/test` | 系统自测 |
+
+## ⚙️ 配置
+
+主要配置文件位于 `src/config.py`。
+
+*   **初始订阅列表**: 加载 `INITIAL_SYMBOLS` 列表。
+*   **支持基准**: 可修改 `SUPPORTED_BENCHMARKS`。
 
 ## 🔧 CI/CD
 

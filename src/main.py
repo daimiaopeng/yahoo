@@ -16,6 +16,7 @@ import os
 import sys
 import socket
 import logging
+import config  # 导入配置
 
 # ========== 智能代理检测 - 必须在 import yfinance 之前 ==========
 
@@ -67,6 +68,7 @@ app = Flask(__name__)
 VERSION = os.getenv('APP_VERSION', 'local-dev')
 COMMIT_TIME = os.getenv('APP_COMMIT_TIME', 'unknown')
 
+
 @app.route('/', methods=['GET'])
 def get_api_docs():
     """获取服务信息和完整 API 文档"""
@@ -80,11 +82,21 @@ def get_api_docs():
             {
                 'path': '/api/data',
                 'method': 'GET',
-                'description': '获取 WebSocket 实时数据',
+                'description': '获取 qqq 实时数据',
                 'params': [],
                 'example': '/api/data',
-                'response_example': {}
-            },
+                'response_example': {
+                      "change": -5.51001,
+                      "change_percent": -0.8753968,
+                      "exchange": "NGM",
+                      "id": "QQQ",
+                      "market_hours": 4,
+                      "price": 623.92,
+                      "price_hint": "2",
+                      "quote_type": 20,
+                      "time": "1769756714000"
+                    }
+                },
             {
                 'path': '/api/status',
                 'method': 'GET',
@@ -104,7 +116,8 @@ def get_api_docs():
                 'example': '/api/benchmarks',
                 'response_example': {
                     'benchmarks': [
-                        {'symbol': 'QQQ', 'name': '纳斯达克100 ETF', 'description': '追踪纳斯达克100指数'}
+                        {'symbol': 'QQQ', 'name': '纳斯达克100 ETF',
+                            'description': '追踪纳斯达克100指数'}
                     ]
                 }
             },
@@ -113,8 +126,10 @@ def get_api_docs():
                 'method': 'GET',
                 'description': '获取指定股票/ETF 的历史数据',
                 'params': [
-                    {'name': 'period', 'type': 'string', 'required': False, 'default': '1mo', 'description': '时间范围', 'options': ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', 'ytd', 'max']},
-                    {'name': 'interval', 'type': 'string', 'required': False, 'default': '1d', 'description': '数据间隔', 'options': ['1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo']}
+                    {'name': 'period', 'type': 'string', 'required': False, 'default': '1mo', 'description': '时间范围', 'options': [
+                        '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', 'ytd', 'max']},
+                    {'name': 'interval', 'type': 'string', 'required': False, 'default': '1d',
+                        'description': '数据间隔', 'options': ['1m', '5m', '15m', '30m', '1h', '1d', '1wk', '1mo']}
                 ],
                 'example': '/api/history/QQQ?period=1mo&interval=1d',
                 'response_example': {
@@ -123,7 +138,8 @@ def get_api_docs():
                     'interval': '1d',
                     'cached': False,
                     'data': [
-                        {'date': '2026-01-01', 'open': 450.0, 'high': 455.0, 'low': 448.0, 'close': 453.0, 'volume': 50000000, 'change_percent': 0.0}
+                        {'date': '2026-01-01', 'open': 450.0, 'high': 455.0, 'low': 448.0,
+                            'close': 453.0, 'volume': 50000000, 'change_percent': 0.0}
                     ]
                 }
             },
@@ -132,8 +148,10 @@ def get_api_docs():
                 'method': 'GET',
                 'description': '获取指定股票的日内分钟级数据',
                 'params': [
-                    {'name': 'interval', 'type': 'string', 'required': False, 'default': '5m', 'description': '数据间隔', 'options': ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']},
-                    {'name': 'period', 'type': 'string', 'required': False, 'default': '1d', 'description': '时间范围', 'options': ['1d', '5d']}
+                    {'name': 'interval', 'type': 'string', 'required': False, 'default': '5m',
+                        'description': '数据间隔', 'options': ['1m', '2m', '5m', '15m', '30m', '60m', '90m', '1h']},
+                    {'name': 'period', 'type': 'string', 'required': False,
+                        'default': '1d', 'description': '时间范围', 'options': ['1d', '5d']}
                 ],
                 'example': '/api/intraday/SPY?interval=5m&period=1d',
                 'response_example': {
@@ -141,7 +159,8 @@ def get_api_docs():
                     'period': '1d',
                     'interval': '5m',
                     'data': [
-                        {'timestamp': '2026-01-29T09:30:00-05:00', 'open': 500.0, 'high': 501.0, 'low': 499.5, 'close': 500.5, 'volume': 1000000}
+                        {'timestamp': '2026-01-29T09:30:00-05:00', 'open': 500.0,
+                            'high': 501.0, 'low': 499.5, 'close': 500.5, 'volume': 1000000}
                     ]
                 }
             },
@@ -150,8 +169,10 @@ def get_api_docs():
                 'method': 'GET',
                 'description': '对比多个基准的收益率',
                 'params': [
-                    {'name': 'symbols', 'type': 'string', 'required': False, 'default': 'QQQ,SPY', 'description': '逗号分隔的股票代码'},
-                    {'name': 'period', 'type': 'string', 'required': False, 'default': '1mo', 'description': '时间范围'}
+                    {'name': 'symbols', 'type': 'string', 'required': False,
+                        'default': 'QQQ,SPY', 'description': '逗号分隔的股票代码'},
+                    {'name': 'period', 'type': 'string', 'required': False,
+                        'default': '1mo', 'description': '时间范围'}
                 ],
                 'example': '/api/compare?symbols=QQQ,SPY,DIA&period=3mo',
                 'response_example': {
@@ -202,6 +223,43 @@ def get_api_docs():
                         {'name': 'QQQ历史数据', 'status': 'success', 'data_points': 22}
                     ]
                 }
+            },
+            {
+                'path': '/api/realtime/<symbol>',
+                'method': 'GET',
+                'description': '获取单个符号的实时数据（自动订阅）',
+                'params': [],
+                'example': '/api/realtime/AAPL',
+                'response_example': {
+                    'symbol': 'AAPL',
+                    'status': 'ok',
+                    'data': {'price': 150.0, 'timestamp': '...'}
+                }
+            },
+            {
+                'path': '/api/realtime',
+                'method': 'GET',
+                'description': '批量获取实时数据（自动订阅）',
+                'params': [
+                    {'name': 'symbols', 'type': 'string',
+                        'description': '逗号分隔的符号列表', 'default': '', 'required': False}
+                ],
+                'example': '/api/realtime?symbols=AAPL,MSFT',
+                'response_example': {
+                    'status': 'ok',
+                    'results': {'AAPL': {'status': 'ok', 'data': {'price': 150.0, 'timestamp': '...'}}}
+                }
+            },
+            {
+                'path': '/api/subscriptions',
+                'method': 'GET',
+                'description': '获取当前所有订阅的符号列表',
+                'params': [],
+                'example': '/api/subscriptions',
+                'response_example': {
+                    'subscribed_symbols': ['AAPL', 'QQQ'],
+                    'subscribed_count': 2
+                }
             }
         ]
     })
@@ -215,14 +273,7 @@ def add_cors_headers(response):
     return response
 
 
-# 支持的基准指数
-SUPPORTED_BENCHMARKS = {
-    'QQQ': 'QQQ',       # 纳斯达克100 ETF
-    'SPY': 'SPY',       # 标普500 ETF
-    'DIA': 'DIA',       # 道琼斯工业 ETF
-    'IWM': 'IWM',       # 罗素2000 ETF
-    'VTI': 'VTI',       # 全美股市 ETF
-}
+# 支持的基准指数 (已移至 config.py)
 
 # 存储最新的数据和连接状态（原有功能）
 latest_data = None
@@ -237,6 +288,19 @@ data_queue = Queue()
 data_cache = {}
 cache_lock = threading.Lock()
 CACHE_DURATION = 60  # 缓存60秒
+
+# ========== 实时数据相关全局变量 ==========
+# 存储所有订阅符号的最新实时数据 {symbol: {price, change, volume, timestamp, ...}}
+realtime_data = {}
+realtime_data_lock = threading.Lock()
+
+# 已订阅的符号集合
+subscribed_symbols = set()
+subscribed_symbols_lock = threading.Lock()
+
+# WebSocket 实例引用，用于动态添加订阅
+ws_instance = None
+ws_instance_lock = threading.Lock()
 
 
 def get_cached_data(symbol, period='1mo'):
@@ -384,9 +448,41 @@ def fetch_historical_data(symbol, period='1mo', interval='1d'):
         return None
 
 
+def add_subscription(symbol):
+    """动态添加订阅符号"""
+    global ws_instance, subscribed_symbols
+    symbol = symbol.upper()
+
+    with subscribed_symbols_lock:
+        if symbol in subscribed_symbols:
+            return False  # 已订阅
+        subscribed_symbols.add(symbol)
+
+    # 尝试添加到 WebSocket 订阅
+    with ws_instance_lock:
+        if ws_instance is not None:
+            try:
+                ws_instance.subscribe([symbol])
+                logging.info(f"动态订阅符号: {symbol}")
+                return True
+            except Exception as e:
+                logging.error(f"动态订阅 {symbol} 失败: {e}")
+                return False
+    return False
+
+
 def websocket_data_handler():
-    """通过WebSocket获取yfinance数据（原有功能）"""
-    global latest_data, connection_status
+    """通过WebSocket获取yfinance数据（支持动态订阅）"""
+    global latest_data, connection_status, ws_instance, realtime_data
+
+    # 默认初始订阅列表 (从 config.py 获取)
+    # 清洗数据：转大写，去空，去重
+    initial_symbols = [s.strip().upper()
+                       for s in config.INITIAL_SYMBOLS if s.strip()]
+
+    with subscribed_symbols_lock:
+        subscribed_symbols.update(initial_symbols)
+
     while True:
         try:
             with status_lock:
@@ -395,10 +491,38 @@ def websocket_data_handler():
             # 创建WebSocket对象获取实时数据
             ws = yf.WebSocket(verbose=False)
 
+            # 保存 WebSocket 实例引用
+            with ws_instance_lock:
+                ws_instance = ws
+
             # 设置消息处理回调
             def on_message(message):
-                print(f"收到数据: {message}")
-                global latest_data
+                global latest_data, realtime_data
+
+                # 提取符号ID
+                symbol = message.get('id', '').upper()
+
+                if symbol:
+                    # 存储到实时数据字典
+                    with realtime_data_lock:
+                        realtime_data[symbol] = {
+                            'symbol': symbol,
+                            'price': message.get('price'),
+                            'change': message.get('change'),
+                            'change_percent': message.get('changePercent'),
+                            'volume': message.get('dayVolume'),
+                            'bid': message.get('bid'),
+                            'ask': message.get('ask'),
+                            'high': message.get('dayHigh'),
+                            'low': message.get('dayLow'),
+                            'open': message.get('openPrice'),
+                            'previous_close': message.get('previousClose'),
+                            'market_hours': message.get('marketHours'),
+                            'timestamp': datetime.now().isoformat(),
+                            'raw': message  # 保留原始数据
+                        }
+
+                # 保持原有功能
                 with latest_data_lock:
                     latest_data = message
                 with status_lock:
@@ -406,7 +530,13 @@ def websocket_data_handler():
                     connection_status = 'connected'
                 data_queue.put(message)
 
-            ws.subscribe(['qqq'])
+            # 订阅初始符号列表
+            with subscribed_symbols_lock:
+                symbols_to_subscribe = list(subscribed_symbols)
+
+            ws.subscribe(symbols_to_subscribe)
+            logging.info(
+                f"WebSocket 已订阅 {len(symbols_to_subscribe)} 个符号: {symbols_to_subscribe}")
 
             # 运行WebSocket监听
             ws.listen(message_handler=on_message)
@@ -415,6 +545,8 @@ def websocket_data_handler():
             logging.error(f"WebSocket错误: {e}")
             with status_lock:
                 connection_status = f'error: {str(e)}'
+            with ws_instance_lock:
+                ws_instance = None
             time.sleep(5)  # 5秒后重连
 
 
@@ -422,12 +554,12 @@ def websocket_data_handler():
 
 @app.route('/api/data', methods=['GET'])
 def get_data():
-    """HTTP路由 - 原封不动返回WebSocket获取的数据"""
-    global latest_data
-    with latest_data_lock:
-        if latest_data is not None:
-            return latest_data
-    return {}
+    """HTTP路由 - 返回WebSocket获取的数据，默认返回QQQ的实时数据"""
+    with realtime_data_lock:
+        qqq_data = realtime_data.get('QQQ')
+        if qqq_data:
+            return jsonify(qqq_data['raw'])
+    return jsonify({'error': 'QQQ 数据尚未获取，请稍后重试'})
 
 
 @app.route('/api/status', methods=['GET'])
@@ -437,7 +569,7 @@ def get_status():
     with status_lock:
         return jsonify({
             'status': connection_status,
-            'supported_benchmarks': list(SUPPORTED_BENCHMARKS.keys())
+            'supported_benchmarks': list(config.SUPPORTED_BENCHMARKS.keys())
         })
 
 
@@ -447,11 +579,8 @@ def get_status():
 def get_benchmarks():
     """获取支持的基准列表"""
     benchmarks = [
-        {'symbol': 'QQQ', 'name': '纳斯达克100 ETF', 'description': '追踪纳斯达克100指数'},
-        {'symbol': 'SPY', 'name': '标普500 ETF', 'description': '追踪标普500指数'},
-        {'symbol': 'DIA', 'name': '道琼斯ETF', 'description': '追踪道琼斯工业平均指数'},
-        {'symbol': 'IWM', 'name': '罗素2000 ETF', 'description': '追踪小盘股指数'},
-        {'symbol': 'VTI', 'name': '全美股市ETF', 'description': '追踪整体美股市场'},
+        {'symbol': k, 'name': v, 'description': f'追踪 {v}'}
+        for k, v in config.SUPPORTED_BENCHMARKS.items()
     ]
     return jsonify({'benchmarks': benchmarks})
 
@@ -601,6 +730,136 @@ def get_quote(symbol):
         return jsonify({'error': str(e)}), 500
 
 
+# ============ 实时数据接口 ============
+
+@app.route('/api/realtime/<symbol>', methods=['GET'])
+def get_realtime(symbol):
+    """
+    获取单个符号的实时数据
+    - 如果符号不在订阅列表中，自动添加订阅
+    - 返回 WebSocket 收到的最新实时数据
+    """
+    symbol = symbol.upper()
+
+    # 检查是否需要添加订阅
+    with subscribed_symbols_lock:
+        is_subscribed = symbol in subscribed_symbols
+
+    if not is_subscribed:
+        add_subscription(symbol)
+        # 刚订阅，可能还没有数据
+        return jsonify({
+            'symbol': symbol,
+            'status': 'subscribed',
+            'message': f'{symbol} 已添加到订阅列表，请稍后再查询获取数据',
+            'data': None
+        })
+
+    # 获取已有的实时数据
+    with realtime_data_lock:
+        data = realtime_data.get(symbol)
+
+    if data:
+        return jsonify({
+            'symbol': symbol,
+            'status': 'ok',
+            'data': data
+        })
+    else:
+        return jsonify({
+            'symbol': symbol,
+            'status': 'waiting',
+            'message': f'{symbol} 已订阅但尚未收到数据',
+            'data': None
+        })
+
+
+@app.route('/api/realtime', methods=['GET'])
+def get_realtime_batch():
+    """
+    批量获取实时数据
+    参数:
+    - symbols: 逗号分隔的代码列表 (如 AAPL,MSFT,NVDA)
+    返回所有已订阅符号的数据，自动订阅新符号
+    """
+    symbols_str = request.args.get('symbols', '')
+
+    if not symbols_str:
+        # 返回所有已订阅符号的数据
+        with realtime_data_lock:
+            all_data = dict(realtime_data)
+        with subscribed_symbols_lock:
+            all_subscribed = list(subscribed_symbols)
+
+        return jsonify({
+            'status': 'ok',
+            'subscribed_count': len(all_subscribed),
+            'data_count': len(all_data),
+            'subscribed_symbols': all_subscribed,
+            'data': all_data
+        })
+
+    # 解析请求的符号列表
+    requested_symbols = [s.strip().upper()
+                         for s in symbols_str.split(',') if s.strip()]
+
+    result = {}
+    newly_subscribed = []
+
+    for symbol in requested_symbols:
+        # 检查是否需要添加订阅
+        with subscribed_symbols_lock:
+            is_subscribed = symbol in subscribed_symbols
+
+        if not is_subscribed:
+            add_subscription(symbol)
+            newly_subscribed.append(symbol)
+            result[symbol] = {
+                'status': 'subscribed',
+                'message': '刚添加订阅，尚无数据',
+                'data': None
+            }
+        else:
+            # 获取实时数据
+            with realtime_data_lock:
+                data = realtime_data.get(symbol)
+
+            if data:
+                result[symbol] = {
+                    'status': 'ok',
+                    'data': data
+                }
+            else:
+                result[symbol] = {
+                    'status': 'waiting',
+                    'message': '已订阅但尚未收到数据',
+                    'data': None
+                }
+
+    return jsonify({
+        'status': 'ok',
+        'requested_count': len(requested_symbols),
+        'newly_subscribed': newly_subscribed,
+        'results': result
+    })
+
+
+@app.route('/api/subscriptions', methods=['GET'])
+def get_subscriptions():
+    """获取当前所有订阅的符号列表"""
+    with subscribed_symbols_lock:
+        symbols = list(subscribed_symbols)
+    with realtime_data_lock:
+        data_symbols = list(realtime_data.keys())
+
+    return jsonify({
+        'subscribed_symbols': symbols,
+        'subscribed_count': len(symbols),
+        'symbols_with_data': data_symbols,
+        'data_count': len(data_symbols)
+    })
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """健康检查"""
@@ -647,12 +906,24 @@ def test_api():
             'status': 'success' if price > 0 else 'failed',
             'price': price
         })
+
     except Exception as e:
         results['tests'].append({
             'name': 'SPY当前报价',
             'status': 'error',
             'error': str(e)
         })
+
+    # 测试3: 实时数据配置检查
+    with subscribed_symbols_lock:
+        subs_count = len(subscribed_symbols)
+
+    results['tests'].append({
+        'name': '实时订阅配置',
+        'status': 'success' if subs_count > 0 else 'warning',
+        'subscribed_count': subs_count,
+        'config_initial_count': len(config.INITIAL_SYMBOLS)
+    })
 
     return jsonify(results)
 
@@ -675,12 +946,16 @@ if __name__ == '__main__':
     logging.info("  GET /api/quote/<symbol>    - 获取当前报价")
     logging.info("  GET /api/test              - 测试API功能")
     logging.info("  GET /api/health            - 健康检查")
+    logging.info("实时数据接口:")
+    logging.info("  GET /api/realtime/<symbol> - 获取单个符号实时数据")
+    logging.info("  GET /api/realtime?symbols= - 批量获取实时数据")
+    logging.info("  GET /api/subscriptions     - 查看当前订阅列表")
     logging.info("=" * 50)
     logging.info("访问 http://localhost:5000/api/test 测试API")
     logging.info("=" * 50)
 
     # 启动Flask服务器
     import logging as werkzeug_logging
-    werkzeug_logging.getLogger('werkzeug').setLevel(logging.ERROR)
+    werkzeug_logging.getLogger('werkzeug').setLevel(logging.INFO)
 
     app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False)
