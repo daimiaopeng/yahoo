@@ -101,12 +101,18 @@
         mode: "0755"
       when: need_deploy and backup_enabled
 
+    - name: 检查数据库文件是否存在
+      stat:
+        path: "{{ db_path }}"
+      register: db_stat
+      when: need_deploy and backup_enabled
+
     - name: 备份当前数据库
       copy:
         src: "{{ db_path }}"
         dest: "{{ backup_dir }}/market_data_{{ ansible_date_time.iso8601_basic_short }}.db"
         remote_src: yes
-      when: need_deploy and backup_enabled
+      when: need_deploy and backup_enabled and db_stat.stat.exists
       ignore_errors: yes
 
     - name: 确保数据目录存在
